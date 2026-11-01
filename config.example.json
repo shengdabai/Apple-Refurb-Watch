@@ -1,0 +1,28 @@
+{
+  "channels": [
+    "feishu",
+    "smtp"
+  ],
+  "recipient": "you@example.com",
+  "watch_models": [
+    "MacBook Air 13 M4",
+    "Mac mini M4"
+  ],
+  "title_patterns": [
+    "MacBook Air",
+    "Mac mini",
+    "Mac Studio"
+  ],
+  "summary": {
+    "enabled": false,
+    "url": "http://example-host:8080/apple-refurb/",
+    "remote": "user@example-host:/var/www/site/apple-refurb/"
+  },
+  "smtp": {
+    "host": "smtp.example.com",
+    "port": 465,
+    "sender": "you@example.com",
+    "sender_name": "Apple Refurb Watch",
+    "_note": "授权码从环境变量 APPLE_MONITOR_SMTP_PASS 或 ~/.config/apple-refurb-monitor/smtp_pass 读取，不写进本文件"
+  }
+}
