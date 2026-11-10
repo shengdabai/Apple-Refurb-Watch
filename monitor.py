@@ -119,6 +119,7 @@ def log(msg):
     if sys.stdout.isatty():
         print(line)
     try:
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         _rotate_log()
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(line + "\n")
@@ -297,18 +298,19 @@ class _DirectSMTP_SSL(smtplib.SMTP_SSL):
 
 
 def build_email_html(new_products, summary_link=None):
+    e = htmllib.escape
     rows = []
     for pn, p in new_products.items():
         gone = ""
         if p.get("on_shelf") is False:
-            gone = f" · 发现于 {p.get('first_seen', '')}，本次检测时已下架"
+            gone = f" · 发现于 {e(str(p.get('first_seen', '')))}，本次检测时已下架"
         rows.append(f"""
         <tr>
           <td style="padding:12px 10px;border-bottom:1px solid #eee;font-size:15px;color:#1d1d1f;">
-            <a href="{p['url']}" style="color:#06c;text-decoration:none;font-weight:600;">{p['title']}</a>
-            <div style="color:#86868b;font-size:12px;margin-top:4px;">货号 {pn}{gone}</div>
+            <a href="{e(_safe_url(p.get('url')))}" style="color:#06c;text-decoration:none;font-weight:600;">{e(str(p['title']))}</a>
+            <div style="color:#86868b;font-size:12px;margin-top:4px;">货号 {e(str(pn))}{gone}</div>
           </td>
-          <td style="padding:12px 10px;border-bottom:1px solid #eee;font-size:16px;color:#1d1d1f;font-weight:700;white-space:nowrap;text-align:right;">{p['price']}</td>
+          <td style="padding:12px 10px;border-bottom:1px solid #eee;font-size:16px;color:#1d1d1f;font-weight:700;white-space:nowrap;text-align:right;">{e(str(p['price']))}</td>
         </tr>""")
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     summary = ""
@@ -442,8 +444,13 @@ def send_feishu(config, text):
     收件人/bot 默认取库内默认值；config.feishu 可选覆盖
     app_id / receive_id / receive_type，不含任何密钥（密钥由库经 secrets-getter 取）。"""
     fcfg = config.get("feishu") or {}
-    lib = fcfg.get("lib") or FEISHU_LIB_DEFAULT
-    to = int(fcfg.get("timeout") or FEISHU_SEND_TIMEOUT)
+    lib = os.path.expanduser(fcfg.get("lib") or FEISHU_LIB_DEFAULT)
+    try:
+        to = int(fcfg.get("timeout") or FEISHU_SEND_TIMEOUT)
+        if to <= 0:
+            raise ValueError("timeout must be positive")
+    except (TypeError, ValueError) as e:
+        raise RuntimeError("飞书 timeout 必须是正整数") from e
     env = dict(os.environ)
     env["FEISHU_PYTHON"] = _feishu_python()
     for key, var in (("app_id", "FEISHU_APP_ID"), ("receive_id", "FEISHU_RECEIVE_ID"),
@@ -462,7 +469,7 @@ def send_feishu(config, text):
         raise RuntimeError(f"飞书库不存在: {lib}（2T 未挂载或无权限？）")
     if rc == 4:
         raise RuntimeError(f"飞书库不可用: {out[:80]}")
-    if rc != 0 or "code=0" not in out:
+    if rc != 0 or not re.search(r"(?<!\S)code=0(?=\s|$)", out):
         raise RuntimeError(f"飞书发送失败 rc={rc}: {out[:160]}")
     log(f"飞书已发送（{out[:40]}）")
 
@@ -983,6 +990,7 @@ def cmd_selftest(config):
     print("[selftest] 邮件主题预览：🍎 苹果翻新上架：1 款新 Mac")
     html = build_email_html(prods)
     preview = BASE_DIR / "logs" / "selftest_email_preview.html"
+    preview.parent.mkdir(parents=True, exist_ok=True)
     preview.write_text(html, encoding="utf-8")
     print(f"[selftest] ✓ 邮件正文已生成，预览文件：{preview}")
     # 真实抓取与解析连通性测试
